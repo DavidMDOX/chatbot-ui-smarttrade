@@ -6,15 +6,17 @@ import Head from "next/head";
 import { useEffect, useRef, useState } from "react";
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [loading, setLoading] = useState<boolean>(false);
+  const [messages, setMessages] = useState<Message[]>([]); // 聊天消息列表
+  const [loading, setLoading] = useState<boolean>(false);   // 加载状态
 
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+  const messagesEndRef = useRef<HTMLDivElement>(null); // 用于自动滚动到底部
 
+  // 滚动到底部函数
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
   };
 
+  // 发送用户消息到后端，获得AI回复
   const handleSend = async (message: Message) => {
     const updatedMessages = [...messages, message];
 
@@ -49,6 +51,7 @@ export default function Home() {
     let done = false;
     let isFirst = true;
 
+    // 处理流式返回的数据
     while (!done) {
       const { value, done: doneReading } = await reader.read();
       done = doneReading;
@@ -76,35 +79,42 @@ export default function Home() {
     }
   };
 
+  // 点击重置按钮时，恢复初始欢迎语
   const handleReset = () => {
     setMessages([
       {
         role: "assistant",
-        content: `Hi there! I'm Chatbot UI, an AI assistant. I can help you with things like answering questions, providing information, and helping with tasks. How can I help you?`
+        content: `欢迎来到 SmartTrade！我是您的专属外贸AI助手，致力于为您高效对接全球供应链。无论是寻找优质供应商、撰写专业外贸邮件、报价谈判、还是制定出口策略，我都能为您提供精准、专业、风趣而高效的支持。
+        
+from Jiaming Li, CEO of SmartTrade.`
       }
     ]);
   };
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
+  // 页面首次加载时，设置初始欢迎语
   useEffect(() => {
     setMessages([
       {
         role: "assistant",
-        content: `Hi there! I'm Chatbot UI, an AI assistant. I can help you with things like answering questions, providing information, and helping with tasks. How can I help you?`
+        content: `欢迎来到 SmartTrade！我是您的专属外贸AI助手，致力于为您高效对接全球供应链。无论是寻找优质供应商、撰写专业外贸邮件、报价谈判、还是制定出口策略，我都能为您提供精准、专业、风趣而高效的支持。
+        
+from Jiaming Li, CEO of SmartTrade.`
       }
     ]);
   }, []);
 
+  // 每次消息变化时，自动滚动到底部
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
   return (
     <>
       <Head>
-        <title>Chatbot UI</title>
+        <title>SmartTrade AI Assistant</title>
         <meta
           name="description"
-          content="A simple chatbot starter kit for OpenAI's chat model using Next.js, TypeScript, and Tailwind CSS."
+          content="SmartTrade智能外贸平台，您的全球供应链AI助手"
         />
         <meta
           name="viewport"
