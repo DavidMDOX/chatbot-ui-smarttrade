@@ -12,7 +12,7 @@ export const OpenAIStream = async (messages: Message[]) => {
     },
     method: "POST",
     body: JSON.stringify({
-      model: OpenAIModel.DAVINCI_TURBO, // 使用davinci turbo模型（可以根据需要换成gpt-4）
+      model: "gpt-4-turbo", // 使用davinci turbo模型（可以根据需要换成gpt-4）
       messages: [
         {
           role: "system",
