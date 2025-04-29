@@ -24,16 +24,16 @@ export default function Home() {
     setLoading(true);
     setInput("");
 
-    // 只提取 user 和 assistant 消息给流程主管作为上下文
-    const controllerInput = updatedLog.filter(
-      (msg) => msg.role === "user" || msg.role === "assistant"
-    ) as Message[];
+    // ✅ 只提取 user 和 assistant 的历史消息，发送给流程主管
+    const controllerInput: Message[] = updatedLog
+      .filter((msg) => msg.role === "user" || msg.role === "assistant")
+      .map((msg) => ({ role: msg.role as "user" | "assistant", content: msg.content }));
 
     // 流程主管响应
     const controllerResponse = await fetchAgentResponse(controllerInput, "controller");
     const newLog = [...updatedLog, { role: "controller", content: controllerResponse }];
 
-    // 用户原始输入，发送给后续专员处理
+    // ✅ 给其他专员发送用户原始输入
     const assistantInput: Message[] = [{ role: "user", content: input }];
 
     const assistantResponses = await Promise.all([
@@ -53,7 +53,7 @@ export default function Home() {
     setLoading(false);
   };
 
-  // 向后端请求对应角色助手的回答
+  // 调用后端接口，获取某个角色助手的回答
   const fetchAgentResponse = async (messages: Message[], agentType: string) => {
     const res = await fetch("/api/chat", {
       method: "POST",
