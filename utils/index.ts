@@ -1,59 +1,56 @@
-import { Message, OpenAIModel } from "@/types";
+import { Message } from "@/types";
 import { createParser, ParsedEvent, ReconnectInterval } from "eventsource-parser";
+import { agents } from "@/utils/agents"; // 引入各个虚拟助手角色定义
 
-export const OpenAIStream = async (messages: Message[]) => {
+// OpenAIStream支持根据不同角色动态发送请求
+export const OpenAIStream = async (messages: Message[], agentType = "controller") => {
   const encoder = new TextEncoder();
   const decoder = new TextDecoder();
+
+  // 根据agentType，加载对应角色的system prompt
+  const systemPrompt = agents[agentType]?.prompt || "You are a helpful assistant.";
 
   const res = await fetch("https://api.openai.com/v1/chat/completions", {
     headers: {
       "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY}` // 从环境变量读取OpenAI密钥
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY}`
     },
     method: "POST",
     body: JSON.stringify({
-      model: "gpt-4-turbo", // 使用davinci turbo模型（可以根据需要换成gpt-4）
+      model: "gpt-4-turbo", // 使用更聪明的模型
       messages: [
         {
           role: "system",
-          content: `You are an AI assistant specializing in international B2B trade.
-You are polite, witty, highly professional, and very efficient.
-You help users find suppliers, write professional emails, negotiate deals, and optimize export strategies.
-Always maintain a friendly, confident, and concise tone.` 
-          // 设置AI角色为：外贸B2B专家，礼貌风趣专业高效
+          content: systemPrompt // 使用对应助手的个性化指导
         },
-        ...messages // 把用户的历史对话接在后面
+        ...messages // 把用户历史对话放后面
       ],
-      max_tokens: 800, // 设定最大回复长度
-      temperature: 0.0, // 温度设0，保证回答准确严谨
-      stream: true // 使用流式输出，提升响应速度体验
+      max_tokens: 800,
+      temperature: 0.0,
+      stream: true
     })
   });
 
-  // 如果OpenAI接口请求失败
   if (res.status !== 200) {
     throw new Error("OpenAI API returned an error");
   }
 
-  // 把OpenAI的stream结果封装成浏览器可读的流
   const stream = new ReadableStream({
     async start(controller) {
       const onParse = (event: ParsedEvent | ReconnectInterval) => {
         if (event.type === "event") {
           const data = event.data;
-
           if (data === "[DONE]") {
-            controller.close(); // 数据结束，关闭流
+            controller.close();
             return;
           }
-
           try {
             const json = JSON.parse(data);
             const text = json.choices[0].delta.content;
             const queue = encoder.encode(text);
-            controller.enqueue(queue); // 把收到的数据推送给前端
+            controller.enqueue(queue);
           } catch (e) {
-            controller.error(e); // 出错处理
+            controller.error(e);
           }
         }
       };
