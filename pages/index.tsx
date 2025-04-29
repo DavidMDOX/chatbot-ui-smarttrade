@@ -23,7 +23,7 @@ export default function Home() {
     setLoading(true);
     setInput("");
 
-    // ✅ 构造合法 controllerInput（只包含 user/assistant）
+    // ✅ 构造合法 Message[] 类型，只传 user / assistant
     const controllerInput: Message[] = updatedLog
       .filter((msg) => msg.role === "user" || msg.role === "assistant")
       .map((msg) => ({
@@ -31,7 +31,7 @@ export default function Home() {
         content: msg.content
       }));
 
-    // ✅ 使用 controllerInput，而不是 updatedLog
+    // ✅ 传的是 controllerInput 而不是 updatedLog
     const controllerResponse = await fetchAgentResponse(controllerInput, "controller");
 
     const newLog: AgentMessage[] = [...updatedLog, { role: "controller", content: controllerResponse }];
