@@ -14,6 +14,7 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
+  // 发送用户输入到流程主管，并调动其他助手
   const handleSendToController = async () => {
     if (!input.trim()) return;
 
@@ -23,15 +24,22 @@ export default function Home() {
     setLoading(true);
     setInput("");
 
-    // 1. 流程主管响应并分配
-    const controllerResponse = await fetchAgentResponse(updatedLog, "controller");
+    // 只提取 user 和 assistant 消息给流程主管作为上下文
+    const controllerInput = updatedLog.filter(
+      (msg) => msg.role === "user" || msg.role === "assistant"
+    ) as Message[];
+
+    // 流程主管响应
+    const controllerResponse = await fetchAgentResponse(controllerInput, "controller");
     const newLog = [...updatedLog, { role: "controller", content: controllerResponse }];
 
-    // 2. 模拟流程主管调用：提取 + 审核 + 报价
+    // 用户原始输入，发送给后续专员处理
+    const assistantInput: Message[] = [{ role: "user", content: input }];
+
     const assistantResponses = await Promise.all([
-      fetchAgentResponse([{ role: "user", content: input }], "infoExtractor"),
-      fetchAgentResponse([{ role: "user", content: input }], "fraudAuditor"),
-      fetchAgentResponse([{ role: "user", content: input }], "priceQuoter")
+      fetchAgentResponse(assistantInput, "infoExtractor"),
+      fetchAgentResponse(assistantInput, "fraudAuditor"),
+      fetchAgentResponse(assistantInput, "priceQuoter")
     ]);
 
     const resultLog = [
@@ -45,6 +53,7 @@ export default function Home() {
     setLoading(false);
   };
 
+  // 向后端请求对应角色助手的回答
   const fetchAgentResponse = async (messages: Message[], agentType: string) => {
     const res = await fetch("/api/chat", {
       method: "POST",
