@@ -23,7 +23,7 @@ export default function Home() {
     setLoading(true);
     setInput("");
 
-    // ✅ 只提取 user 和 assistant 消息作为上下文发给 OpenAI
+    // ✅ 过滤 user/assistant 消息作为流程主管上下文
     const controllerInput: Message[] = updatedLog
       .filter((msg) => msg.role === "user" || msg.role === "assistant")
       .map((msg) => ({
@@ -31,12 +31,11 @@ export default function Home() {
         content: msg.content
       }));
 
-    // ✅ 正确传入过滤后的 controllerInput，而不是 updatedLog
     const controllerResponse = await fetchAgentResponse(controllerInput, "controller");
 
     const newLog: AgentMessage[] = [...updatedLog, { role: "controller", content: controllerResponse }];
 
-    // 只发送 user 输入给下游角色
+    // ✅ 单独处理发送给其他助手的 user 消息
     const assistantInput: Message[] = [{ role: "user", content: input }];
 
     const assistantResponses = await Promise.all([
@@ -56,11 +55,20 @@ export default function Home() {
     setLoading(false);
   };
 
-  const fetchAgentResponse = async (messages: Message[], agentType: string) => {
+  // ✅ 这里的类型放宽，不强制只接收 Message[]
+  const fetchAgentResponse = async (messages: AgentMessage[] | Message[], agentType: string) => {
+    // 过滤只传 user/assistant 给后端
+    const filteredMessages: Message[] = messages
+      .filter((msg) => msg.role === "user" || msg.role === "assistant")
+      .map((msg) => ({
+        role: msg.role as "user" | "assistant",
+        content: msg.content
+      }));
+
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, agentType })
+      body: JSON.stringify({ messages: filteredMessages, agentType })
     });
 
     if (!res.ok || !res.body) return "（助手未能回应，请稍后再试）";
