@@ -31,7 +31,7 @@ export default function Home() {
 
     // 流程主管响应
     const controllerResponse = await fetchAgentResponse(controllerInput, "controller");
-    const newLog = [...updatedLog, { role: "controller", content: controllerResponse }];
+    const newLog: AgentMessage[] = [...updatedLog, { role: "controller", content: controllerResponse }];
 
     // ✅ 给其他专员发送用户原始输入
     const assistantInput: Message[] = [{ role: "user", content: input }];
