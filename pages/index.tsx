@@ -14,26 +14,29 @@ export default function Home() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // 发送用户输入到流程主管，并调动其他助手
   const handleSendToController = async () => {
     if (!input.trim()) return;
 
     const userMessage: AgentMessage = { role: "user", content: input };
-    const updatedLog = [...chatLog, userMessage];
+    const updatedLog: AgentMessage[] = [...chatLog, userMessage];
     setChatLog(updatedLog);
     setLoading(true);
     setInput("");
 
-    // ✅ 只提取 user 和 assistant 的历史消息，发送给流程主管
+    // ✅ 只提取 user 和 assistant 消息作为上下文发给 OpenAI
     const controllerInput: Message[] = updatedLog
       .filter((msg) => msg.role === "user" || msg.role === "assistant")
-      .map((msg) => ({ role: msg.role as "user" | "assistant", content: msg.content }));
+      .map((msg) => ({
+        role: msg.role as "user" | "assistant",
+        content: msg.content
+      }));
 
-    // 流程主管响应
+    // ✅ 正确传入过滤后的 controllerInput，而不是 updatedLog
     const controllerResponse = await fetchAgentResponse(controllerInput, "controller");
+
     const newLog: AgentMessage[] = [...updatedLog, { role: "controller", content: controllerResponse }];
 
-    // ✅ 给其他专员发送用户原始输入
+    // 只发送 user 输入给下游角色
     const assistantInput: Message[] = [{ role: "user", content: input }];
 
     const assistantResponses = await Promise.all([
@@ -42,7 +45,7 @@ export default function Home() {
       fetchAgentResponse(assistantInput, "priceQuoter")
     ]);
 
-    const resultLog = [
+    const resultLog: AgentMessage[] = [
       ...newLog,
       { role: "infoExtractor", content: assistantResponses[0] },
       { role: "fraudAuditor", content: assistantResponses[1] },
@@ -53,7 +56,6 @@ export default function Home() {
     setLoading(false);
   };
 
-  // 调用后端接口，获取某个角色助手的回答
   const fetchAgentResponse = async (messages: Message[], agentType: string) => {
     const res = await fetch("/api/chat", {
       method: "POST",
