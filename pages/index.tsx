@@ -1,147 +1,107 @@
-import { Chat } from "@/components/Chat/Chat";
-import { Footer } from "@/components/Layout/Footer";
-import { Navbar } from "@/components/Layout/Navbar";
+import { useState } from "react";
+import { agents } from "@/utils/agents";
 import { Message } from "@/types";
-import Head from "next/head";
-import { useEffect, useRef, useState } from "react";
+
+type RoleName = keyof typeof agents | "user";
+
+interface AgentMessage {
+  role: RoleName;
+  content: string;
+}
 
 export default function Home() {
-  const [messages, setMessages] = useState<Message[]>([]); // 聊天消息列表
-  const [loading, setLoading] = useState<boolean>(false);   // 加载状态
+  const [chatLog, setChatLog] = useState<AgentMessage[]>([]);
+  const [input, setInput] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  const messagesEndRef = useRef<HTMLDivElement>(null); // 用于自动滚动到底部
+  const handleSendToController = async () => {
+    if (!input.trim()) return;
 
-  // 滚动到底部函数
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    const userMessage: AgentMessage = { role: "user", content: input };
+    const updatedLog = [...chatLog, userMessage];
+    setChatLog(updatedLog);
+    setLoading(true);
+    setInput("");
+
+    // 1. 流程主管响应并分配
+    const controllerResponse = await fetchAgentResponse(updatedLog, "controller");
+    const newLog = [...updatedLog, { role: "controller", content: controllerResponse }];
+
+    // 2. 模拟流程主管调用：提取 + 审核 + 报价
+    const assistantResponses = await Promise.all([
+      fetchAgentResponse([{ role: "user", content: input }], "infoExtractor"),
+      fetchAgentResponse([{ role: "user", content: input }], "fraudAuditor"),
+      fetchAgentResponse([{ role: "user", content: input }], "priceQuoter")
+    ]);
+
+    const resultLog = [
+      ...newLog,
+      { role: "infoExtractor", content: assistantResponses[0] },
+      { role: "fraudAuditor", content: assistantResponses[1] },
+      { role: "priceQuoter", content: assistantResponses[2] }
+    ];
+
+    setChatLog(resultLog);
+    setLoading(false);
   };
 
-  // 发送用户消息到后端，获得AI回复
-  const handleSend = async (message: Message) => {
-    const updatedMessages = [...messages, message];
-
-    setMessages(updatedMessages);
-    setLoading(true);
-
-    const response = await fetch("/api/chat", {
+  const fetchAgentResponse = async (messages: Message[], agentType: string) => {
+    const res = await fetch("/api/chat", {
       method: "POST",
-      headers: {
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        messages: updatedMessages
-      })
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ messages, agentType })
     });
 
-    if (!response.ok) {
-      setLoading(false);
-      throw new Error(response.statusText);
-    }
+    if (!res.ok || !res.body) return "（助手未能回应，请稍后再试）";
 
-    const data = response.body;
-
-    if (!data) {
-      return;
-    }
-
-    setLoading(false);
-
-    const reader = data.getReader();
+    const reader = res.body.getReader();
     const decoder = new TextDecoder();
+    let result = "";
     let done = false;
-    let isFirst = true;
 
-    // 处理流式返回的数据
     while (!done) {
       const { value, done: doneReading } = await reader.read();
       done = doneReading;
-      const chunkValue = decoder.decode(value);
-
-      if (isFirst) {
-        isFirst = false;
-        setMessages((messages) => [
-          ...messages,
-          {
-            role: "assistant",
-            content: chunkValue
-          }
-        ]);
-      } else {
-        setMessages((messages) => {
-          const lastMessage = messages[messages.length - 1];
-          const updatedMessage = {
-            ...lastMessage,
-            content: lastMessage.content + chunkValue
-          };
-          return [...messages.slice(0, -1), updatedMessage];
-        });
-      }
+      result += decoder.decode(value);
     }
+
+    return result;
   };
-
-  // 点击重置按钮时，恢复初始欢迎语
-  const handleReset = () => {
-    setMessages([
-      {
-        role: "assistant",
-        content: `欢迎来到 SmartTrade！我是您的专属外贸AI助手，致力于为您高效对接全球供应链。无论是寻找优质供应商、撰写专业外贸邮件、报价谈判、还是制定出口策略，我都能为您提供精准、专业、风趣而高效的支持。
-        
-from Jiaming Li, CEO of SmartTrade.`
-      }
-    ]);
-  };
-
-  // 页面首次加载时，设置初始欢迎语
-  useEffect(() => {
-    setMessages([
-      {
-        role: "assistant",
-        content: `欢迎来到 SmartTrade！我是您的专属外贸AI助手，致力于为您高效对接全球供应链。无论是寻找优质供应商、撰写专业外贸邮件、报价谈判、还是制定出口策略，我都能为您提供精准、专业、风趣而高效的支持。
-        
-from Jiaming Li, CEO of SmartTrade.`
-      }
-    ]);
-  }, []);
-
-  // 每次消息变化时，自动滚动到底部
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
 
   return (
-    <>
-      <Head>
-        <title>SmartTrade AI Assistant</title>
-        <meta
-          name="description"
-          content="SmartTrade智能外贸平台，您的全球供应链AI助手"
-        />
-        <meta
-          name="viewport"
-          content="width=device-width, initial-scale=1"
-        />
-        <link
-          rel="icon"
-          href="/favicon.ico"
-        />
-      </Head>
+    <div className="max-w-3xl mx-auto p-4">
+      <h1 className="text-2xl font-bold mb-4">SmartTrade 虚拟外贸团队</h1>
 
-      <div className="flex flex-col h-screen">
-        <Navbar />
-
-        <div className="flex-1 overflow-auto sm:px-10 pb-4 sm:pb-10">
-          <div className="max-w-[800px] mx-auto mt-4 sm:mt-12">
-            <Chat
-              messages={messages}
-              loading={loading}
-              onSend={handleSend}
-              onReset={handleReset}
-            />
-            <div ref={messagesEndRef} />
+      <div className="border rounded-lg bg-white p-4 h-[500px] overflow-y-auto shadow-inner">
+        {chatLog.map((msg, i) => (
+          <div key={i} className="mb-4">
+            <div className="text-sm font-semibold text-gray-600">
+              {msg.role === "user"
+                ? "🧑 用户"
+                : `🤖 ${agents[msg.role as keyof typeof agents]?.name || msg.role}`}
+            </div>
+            <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
           </div>
-        </div>
-        <Footer />
+        ))}
+        {loading && <div className="text-sm text-gray-400">助手处理中……</div>}
       </div>
-    </>
+
+      <div className="mt-4 flex gap-2">
+        <input
+          className="flex-1 border px-3 py-2 rounded shadow"
+          placeholder="请输入任务，例如：请审核客户+回复报价邮件..."
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && handleSendToController()}
+        />
+        <button
+          className="bg-blue-600 text-white px-4 py-2 rounded shadow"
+          disabled={loading}
+          onClick={handleSendToController}
+        >
+          发送给流程主管
+        </button>
+      </div>
+    </div>
   );
 }
