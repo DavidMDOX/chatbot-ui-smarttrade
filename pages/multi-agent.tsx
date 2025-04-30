@@ -9,7 +9,7 @@ interface AgentMessage {
   content: string;
 }
 
-// ✅ 添加转换函数：AgentMessage[] → Message[]
+// ✅ 转换 AgentMessage[] → Message[]
 const toMessageArray = (log: AgentMessage[]): Message[] =>
   log.map((msg) => ({
     role: msg.role === "user" ? "user" : "assistant",
@@ -31,18 +31,19 @@ export default function MultiAgentChat() {
     setLoading(true);
     setInput("");
 
-    // ✅ 修复类型：转换为 Message[]
+    // ✅ 流程主管响应，转换为标准 Message[]
     const controllerResponse = await fetchAgentResponse(toMessageArray(updatedLog), "controller");
-    const newLog = [...updatedLog, { role: "controller", content: controllerResponse }];
+    const newLog: AgentMessage[] = [...updatedLog, { role: "controller", content: controllerResponse }];
 
-    // 2. 模拟：流程主管把任务交给其他助手
+    // 子助手响应（用户输入为 prompt）
     const assistantResponses = await Promise.all([
       fetchAgentResponse([{ role: "user", content: input }], "infoExtractor"),
       fetchAgentResponse([{ role: "user", content: input }], "fraudAuditor"),
       fetchAgentResponse([{ role: "user", content: input }], "priceQuoter")
     ]);
 
-    const resultLog = [
+    // ✅ 指明类型为 AgentMessage[]
+    const resultLog: AgentMessage[] = [
       ...newLog,
       { role: "infoExtractor", content: assistantResponses[0] },
       { role: "fraudAuditor", content: assistantResponses[1] },
@@ -54,7 +55,7 @@ export default function MultiAgentChat() {
   };
 
   // 向 API 发送请求，获取指定助手的回复
-  const fetchAgentResponse = async (messages: Message[], agentType: string) => {
+  const fetchAgentResponse = async (messages: Message[], agentType: string): Promise<string> => {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
