@@ -1,11 +1,11 @@
 import { Message } from "@/types";
 import { agents } from "@/utils/agents";
+import { OpenAIModel } from "@/types";
 
 export const config = {
   runtime: "edge"
 };
 
-// ✅ 内部定义 OpenAIStream 函数（替代缺失导出）
 async function OpenAIStream(messages: Message[], agentType: keyof typeof agents) {
   const systemPrompt = agents[agentType]?.prompt || "You are a helpful assistant.";
 
@@ -16,7 +16,7 @@ async function OpenAIStream(messages: Message[], agentType: keyof typeof agents)
     },
     method: "POST",
     body: JSON.stringify({
-      model: "gpt-4-turbo",
+      model: OpenAIModel.GPT_4_TURBO,  // ✅ 使用统一定义
       messages: [
         { role: "system", content: systemPrompt },
         ...messages
@@ -38,13 +38,10 @@ const handler = async (req: Request): Promise<Response> => {
 
     const charLimit = 12000;
     let charCount = 0;
-    let messagesToSend: Message[] = [];
+    const messagesToSend: Message[] = [];
 
-    for (let i = 0; i < messages.length; i++) {
-      const message = messages[i];
-      if (charCount + message.content.length > charLimit) {
-        break;
-      }
+    for (const message of messages) {
+      if (charCount + message.content.length > charLimit) break;
       charCount += message.content.length;
       messagesToSend.push(message);
     }
@@ -52,12 +49,12 @@ const handler = async (req: Request): Promise<Response> => {
     const stream = await OpenAIStream(messagesToSend, (agentType || "controller") as keyof typeof agents);
 
     return new Response(stream, {
-  headers: {
-    "Content-Type": "text/event-stream"
-  }
-});
+      headers: {
+        "Content-Type": "text/event-stream"
+      }
+    });
   } catch (error) {
-    console.error(error);
+    console.error("API handler error:", error);
     return new Response("Error", { status: 500 });
   }
 };
