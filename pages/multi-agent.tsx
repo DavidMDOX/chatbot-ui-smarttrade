@@ -9,6 +9,13 @@ interface AgentMessage {
   content: string;
 }
 
+// ✅ 添加转换函数：AgentMessage[] → Message[]
+const toMessageArray = (log: AgentMessage[]): Message[] =>
+  log.map((msg) => ({
+    role: msg.role === "user" ? "user" : "assistant",
+    content: msg.content
+  }));
+
 export default function MultiAgentChat() {
   const [chatLog, setChatLog] = useState<AgentMessage[]>([]);
   const [input, setInput] = useState("");
@@ -24,8 +31,8 @@ export default function MultiAgentChat() {
     setLoading(true);
     setInput("");
 
-    // 1. 流程主管处理
-    const controllerResponse = await fetchAgentResponse(updatedLog, "controller");
+    // ✅ 修复类型：转换为 Message[]
+    const controllerResponse = await fetchAgentResponse(toMessageArray(updatedLog), "controller");
     const newLog = [...updatedLog, { role: "controller", content: controllerResponse }];
 
     // 2. 模拟：流程主管把任务交给其他助手
