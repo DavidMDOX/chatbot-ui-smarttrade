@@ -9,11 +9,10 @@ interface AgentMessage {
   content: string;
 }
 
-// ✅ 转换 AgentMessage[] → Message[]
 const toMessageArray = (log: AgentMessage[]): Message[] =>
   log.map((msg) => ({
     role: msg.role === "user" ? "user" : "assistant",
-    content: msg.content
+    content: msg.content,
   }));
 
 export default function MultiAgentChat() {
@@ -21,7 +20,6 @@ export default function MultiAgentChat() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // 发送任务给流程主管，并模拟流程主管调用其他助手
   const handleSendToController = async () => {
     if (!input.trim()) return;
 
@@ -31,48 +29,69 @@ export default function MultiAgentChat() {
     setLoading(true);
     setInput("");
 
-    // ✅ 流程主管响应，转换为标准 Message[]
-    const controllerResponse = await fetchAgentResponse(toMessageArray(updatedLog), "controller");
-    const newLog: AgentMessage[] = [...updatedLog, { role: "controller", content: controllerResponse }];
+    const controllerResponse = await fetchAgentResponse(
+      toMessageArray(updatedLog),
+      "controller"
+    );
+    const newLog: AgentMessage[] = [
+      ...updatedLog,
+      { role: "controller", content: controllerResponse },
+    ];
 
-    // 子助手响应（用户输入为 prompt）
     const assistantResponses = await Promise.all([
       fetchAgentResponse([{ role: "user", content: input }], "infoExtractor"),
       fetchAgentResponse([{ role: "user", content: input }], "fraudAuditor"),
-      fetchAgentResponse([{ role: "user", content: input }], "priceQuoter")
+      fetchAgentResponse([{ role: "user", content: input }], "priceQuoter"),
     ]);
 
-    // ✅ 指明类型为 AgentMessage[]
     const resultLog: AgentMessage[] = [
       ...newLog,
       { role: "infoExtractor", content: assistantResponses[0] },
       { role: "fraudAuditor", content: assistantResponses[1] },
-      { role: "priceQuoter", content: assistantResponses[2] }
+      { role: "priceQuoter", content: assistantResponses[2] },
     ];
 
     setChatLog(resultLog);
     setLoading(false);
   };
 
-  // 向 API 发送请求，获取指定助手的回复
-  const fetchAgentResponse = async (messages: Message[], agentType: string): Promise<string> => {
+  const fetchAgentResponse = async (
+    messages: Message[],
+    agentType: string
+  ): Promise<string> => {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, agentType })
+      body: JSON.stringify({ messages, agentType }),
     });
 
     if (!res.ok || !res.body) return "（助手未能回应，请稍后再试）";
 
     const reader = res.body.getReader();
-    const decoder = new TextDecoder();
+    const decoder = new TextDecoder("utf-8");
     let result = "";
     let done = false;
 
     while (!done) {
       const { value, done: doneReading } = await reader.read();
       done = doneReading;
-      result += decoder.decode(value);
+      if (value) {
+        const chunk = decoder.decode(value, { stream: true });
+        const lines = chunk
+          .split("\n")
+          .filter((line) => line.trim().startsWith("data:"));
+        for (const line of lines) {
+          const jsonStr = line.replace("data: ", "").trim();
+          if (jsonStr === "[DONE]") continue;
+          try {
+            const json = JSON.parse(jsonStr);
+            const delta = json.choices?.[0]?.delta?.content;
+            if (delta) result += delta;
+          } catch (err) {
+            console.error("JSON parse error:", err);
+          }
+        }
+      }
     }
 
     return result;
