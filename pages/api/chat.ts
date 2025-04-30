@@ -1,15 +1,39 @@
 import { Message } from "@/types";
-import { OpenAIStream } from "@/utils";
+import { agents } from "@/utils/agents";
 
 export const config = {
   runtime: "edge"
 };
 
+// ✅ 内部定义 OpenAIStream 函数（替代缺失导出）
+async function OpenAIStream(messages: Message[], agentType: keyof typeof agents) {
+  const systemPrompt = agents[agentType]?.prompt || "You are a helpful assistant.";
+
+  const res = await fetch("https://api.openai.com/v1/chat/completions", {
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${process.env.OPENAI_API_KEY || ""}`
+    },
+    method: "POST",
+    body: JSON.stringify({
+      model: "gpt-3.5-turbo",
+      messages: [
+        { role: "system", content: systemPrompt },
+        ...messages
+      ],
+      temperature: 0.5,
+      stream: true
+    })
+  });
+
+  return res.body;
+}
+
 const handler = async (req: Request): Promise<Response> => {
   try {
     const { messages, agentType } = (await req.json()) as {
       messages: Message[];
-      agentType?: string; // 支持传入助手类型
+      agentType?: string;
     };
 
     const charLimit = 12000;
@@ -25,8 +49,7 @@ const handler = async (req: Request): Promise<Response> => {
       messagesToSend.push(message);
     }
 
-    // 传入 agentType 给 OpenAIStream，默认为 controller
-    const stream = await OpenAIStream(messagesToSend, agentType || "controller");
+    const stream = await OpenAIStream(messagesToSend, (agentType || "controller") as keyof typeof agents);
 
     return new Response(stream);
   } catch (error) {
