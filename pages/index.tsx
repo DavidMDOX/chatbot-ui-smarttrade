@@ -1,3 +1,4 @@
+
 import { useState } from "react";
 import { agents } from "@/utils/agents";
 import { Message } from "@/types";
@@ -9,7 +10,7 @@ interface AgentMessage {
   content: string;
 }
 
-// ✅ 将自定义 AgentMessage 转换为标准 Message
+// ✅ 新增函数：将 AgentMessage[] 转换为 Message[]
 const toMessageArray = (log: AgentMessage[]): Message[] =>
   log.map((msg) => ({
     role: msg.role === "user" ? "user" : "assistant",
@@ -30,7 +31,7 @@ export default function Home() {
     setLoading(true);
     setInput("");
 
-    // ✅ 转换成标准 Message[]
+    // ✅ 使用转换函数，避免类型报错
     const controllerResponse = await fetchAgentResponse(toMessageArray(updatedLog), "controller");
 
     const newLog: AgentMessage[] = [...updatedLog, { role: "controller", content: controllerResponse }];
@@ -54,6 +55,7 @@ export default function Home() {
     setLoading(false);
   };
 
+  // ✅ 改为只接受 Message[] 类型
   const fetchAgentResponse = async (messages: Message[], agentType: string): Promise<string> => {
     const res = await fetch("/api/chat", {
       method: "POST",
