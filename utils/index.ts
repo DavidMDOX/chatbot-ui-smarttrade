@@ -16,7 +16,7 @@ export const fetchAgentResponse = async (
     },
     method: "POST",
     body: JSON.stringify({
-      model: "gpt-3.5-turbo",
+      model: "gpt-4-turbo",
       messages: [
         { role: "system", content: systemPrompt },
         ...messages
