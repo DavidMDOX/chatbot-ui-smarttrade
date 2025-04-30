@@ -9,6 +9,15 @@ interface AgentMessage {
   content: string;
 }
 
+// 工具函数：将 AgentMessage[] 转换为符合 Message[] 的结构
+const toMessageArray = (log: AgentMessage[]): Message[] =>
+  log
+    .filter((msg) => msg.role === "user" || msg.role === "assistant")
+    .map((msg) => ({
+      role: msg.role as "user" | "assistant",
+      content: msg.content
+    }));
+
 export default function Home() {
   const [chatLog, setChatLog] = useState<AgentMessage[]>([]);
   const [input, setInput] = useState("");
@@ -23,19 +32,12 @@ export default function Home() {
     setLoading(true);
     setInput("");
 
-    // ✅ 构造合法 Message[] 类型，只传 user / assistant
-    const controllerInput: Message[] = updatedLog
-      .filter((msg) => msg.role === "user" || msg.role === "assistant")
-      .map((msg) => ({
-        role: msg.role as "user" | "assistant",
-        content: msg.content
-      }));
-
-    // ✅ 传的是 controllerInput 而不是 updatedLog
-    const controllerResponse = await fetchAgentResponse(controllerInput, "controller");
+    // 控制器响应
+    const controllerResponse = await fetchAgentResponse(toMessageArray(updatedLog), "controller");
 
     const newLog: AgentMessage[] = [...updatedLog, { role: "controller", content: controllerResponse }];
 
+    // 各子助理响应
     const assistantInput: Message[] = [{ role: "user", content: input }];
 
     const assistantResponses = await Promise.all([
@@ -55,18 +57,12 @@ export default function Home() {
     setLoading(false);
   };
 
-  const fetchAgentResponse = async (messages: AgentMessage[] | Message[], agentType: string) => {
-    const filteredMessages: Message[] = messages
-      .filter((msg) => msg.role === "user" || msg.role === "assistant")
-      .map((msg) => ({
-        role: msg.role as "user" | "assistant",
-        content: msg.content
-      }));
-
+  // ✅ 改成只接受 Message[] 类型
+  const fetchAgentResponse = async (messages: Message[], agentType: string): Promise<string> => {
     const res = await fetch("/api/chat", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages: filteredMessages, agentType })
+      body: JSON.stringify({ messages, agentType })
     });
 
     if (!res.ok || !res.body) return "（助手未能回应，请稍后再试）";
