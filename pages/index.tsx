@@ -97,6 +97,8 @@ export default function MultiAgentChat() {
 
   return (
     <div className="max-w-6xl mx-auto p-6 min-h-screen bg-gradient-to-br from-white to-blue-50">
+      <h1 className="text-3xl font-bold text-center text-red-600">调试中：是否生效？</h1>
+    
       <h1 className="text-3xl font-bold text-center text-blue-800 mb-8">💼 SmartTrade 虚拟团队工作台</h1>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
