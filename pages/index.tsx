@@ -33,10 +33,7 @@ export default function MultiAgentChat() {
     setLoading(true);
     const userMessage: Message = { role: "user", content: input };
 
-    // 1. controller 响应
     const controllerReply = await fetchAgentResponse([userMessage], "controller");
-
-    // 2. 子助手响应（infoExtractor / fraudAuditor / priceQuoter）
     const [info, audit, quote] = await Promise.all([
       fetchAgentResponse([userMessage], "infoExtractor"),
       fetchAgentResponse([userMessage], "fraudAuditor"),
@@ -103,32 +100,35 @@ export default function MultiAgentChat() {
   };
 
   return (
-    <div className="max-w-5xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6 text-center">SmartTrade 虚拟团队工作台</h1>
+    <div className="max-w-5xl mx-auto p-6">
+      <h1 className="text-3xl font-bold text-center mb-8 text-blue-700">SmartTrade 虚拟团队工作台</h1>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         {assistantRoles.map((role) => (
-          <div key={role} className="border rounded-lg bg-white p-4 shadow h-[240px] overflow-y-auto">
-            <div className="text-sm font-semibold text-blue-600 mb-2">
+          <div
+            key={role}
+            className="rounded-lg shadow-lg bg-gradient-to-br from-white to-blue-50 border border-blue-200 p-5 hover:shadow-xl transition-shadow"
+          >
+            <h2 className="font-semibold text-blue-800 text-lg mb-3">
               🤖 {agents[role]?.name}
-            </div>
-            <div className="text-sm whitespace-pre-wrap text-gray-700">
+            </h2>
+            <p className="text-sm text-gray-800 whitespace-pre-wrap">
               {chatByRole[role] || "（暂无消息）"}
-            </div>
+            </p>
           </div>
         ))}
       </div>
 
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-center">
         <input
-          className="flex-1 border px-3 py-2 rounded shadow"
+          className="flex-1 border border-gray-300 px-4 py-2 rounded-full shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-400"
           placeholder="请告诉流程总管你的任务需求..."
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSendToController()}
         />
         <button
-          className="bg-blue-600 text-white px-4 py-2 rounded shadow"
+          className="bg-blue-600 hover:bg-blue-700 transition text-white font-medium px-5 py-2 rounded-full shadow"
           disabled={loading}
           onClick={handleSendToController}
         >
