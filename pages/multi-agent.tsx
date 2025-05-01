@@ -33,7 +33,7 @@ export default function MultiAgentChat() {
       toMessageArray(updatedLog),
       "controller"
     );
-    const newLog: AgentMessage[] = [
+    const logWithController: AgentMessage[] = [
       ...updatedLog,
       { role: "controller", content: controllerResponse },
     ];
@@ -44,14 +44,14 @@ export default function MultiAgentChat() {
       fetchAgentResponse([{ role: "user", content: input }], "priceQuoter"),
     ]);
 
-    const resultLog: AgentMessage[] = [
-      ...newLog,
+    const finalLog: AgentMessage[] = [
+      ...logWithController,
       { role: "infoExtractor", content: assistantResponses[0] },
       { role: "fraudAuditor", content: assistantResponses[1] },
       { role: "priceQuoter", content: assistantResponses[2] },
     ];
 
-    setChatLog(resultLog);
+    setChatLog(finalLog);
     setLoading(false);
   };
 
@@ -85,7 +85,9 @@ export default function MultiAgentChat() {
           if (jsonStr === "[DONE]") continue;
           try {
             const json = JSON.parse(jsonStr);
-            const delta = json.choices?.[0]?.delta?.content;
+            const delta =
+              json.choices?.[0]?.delta?.content ??
+              json.choices?.[0]?.message?.content;
             if (delta) result += delta;
           } catch (err) {
             console.error("JSON parse error:", err);
@@ -94,31 +96,53 @@ export default function MultiAgentChat() {
       }
     }
 
-    return result;
+    return result || "（助手没有返回任何内容）";
   };
 
+  const groupedMessages: Record<RoleName, string[]> = {
+    user: [],
+    controller: [],
+    infoExtractor: [],
+    fraudAuditor: [],
+    priceQuoter: [],
+  };
+
+  chatLog.forEach((msg) => {
+    groupedMessages[msg.role] ||= [];
+    groupedMessages[msg.role].push(msg.content);
+  });
+
+  const renderRoleBox = (role: RoleName) => (
+    <div className="border rounded-lg bg-white p-4 shadow mb-4">
+      <h2 className="font-semibold text-blue-700 mb-2">
+        {role === "user"
+          ? "🧑 用户"
+          : `🤖 ${agents[role as keyof typeof agents]?.name || role}`}
+      </h2>
+      {groupedMessages[role]?.map((text, idx) => (
+        <div key={idx} className="text-sm text-gray-800 whitespace-pre-wrap mb-2">
+          {text}
+        </div>
+      ))}
+    </div>
+  );
+
   return (
-    <div className="max-w-3xl mx-auto p-4">
+    <div className="max-w-4xl mx-auto p-4">
       <h1 className="text-2xl font-bold mb-4">SmartTrade 虚拟团队工作台</h1>
 
-      <div className="border rounded-lg bg-white p-4 h-[500px] overflow-y-auto shadow-inner">
-        {chatLog.map((msg, i) => (
-          <div key={i} className="mb-4">
-            <div className="text-sm font-semibold text-gray-600">
-              {msg.role === "user"
-                ? "🧑 用户"
-                : `🤖 ${agents[msg.role as keyof typeof agents]?.name || msg.role}`}
-            </div>
-            <div className="text-sm whitespace-pre-wrap">{msg.content}</div>
-          </div>
-        ))}
-        {loading && <div className="text-sm text-gray-400">助手处理中……</div>}
-      </div>
+      {renderRoleBox("user")}
+      {renderRoleBox("controller")}
+      {renderRoleBox("infoExtractor")}
+      {renderRoleBox("fraudAuditor")}
+      {renderRoleBox("priceQuoter")}
+
+      {loading && <div className="text-sm text-gray-500 mb-4">🤖 助手处理中……</div>}
 
       <div className="mt-4 flex gap-2">
         <input
           className="flex-1 border px-3 py-2 rounded shadow"
-          placeholder="请描述你的任务需求，例如：请帮我回复客户的这封英文邮件……"
+          placeholder="请输入任务，例如：请帮我回复客户的这封英文邮件……"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSendToController()}
@@ -128,7 +152,7 @@ export default function MultiAgentChat() {
           disabled={loading}
           onClick={handleSendToController}
         >
-          发送给流程主管
+          发给流程总管
         </button>
       </div>
     </div>
