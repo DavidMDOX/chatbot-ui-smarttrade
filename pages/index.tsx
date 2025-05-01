@@ -9,8 +9,6 @@ interface AgentMessage {
   content: string;
 }
 
-const assistantRoles: RoleName[] = ["controller", "infoExtractor", "fraudAuditor", "priceQuoter"];
-
 const toMessageArray = (log: AgentMessage[]): Message[] =>
   log.map((msg) => ({
     role: msg.role === "user" ? "user" : "assistant",
@@ -18,36 +16,42 @@ const toMessageArray = (log: AgentMessage[]): Message[] =>
   }));
 
 export default function MultiAgentChat() {
+  const [chatLog, setChatLog] = useState<AgentMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [chatByRole, setChatByRole] = useState<Record<RoleName, string>>({
-    controller: "",
-    infoExtractor: "",
-    fraudAuditor: "",
-    priceQuoter: "",
-  });
 
   const handleSendToController = async () => {
     if (!input.trim()) return;
 
+    const userMessage: AgentMessage = { role: "user", content: input };
+    const updatedLog = [...chatLog, userMessage];
+    setChatLog(updatedLog);
     setLoading(true);
-    const userMessage: Message = { role: "user", content: input };
+    setInput("");
 
-    const controllerReply = await fetchAgentResponse([userMessage], "controller");
-    const [info, audit, quote] = await Promise.all([
-      fetchAgentResponse([userMessage], "infoExtractor"),
-      fetchAgentResponse([userMessage], "fraudAuditor"),
-      fetchAgentResponse([userMessage], "priceQuoter"),
+    const controllerResponse = await fetchAgentResponse(
+      toMessageArray(updatedLog),
+      "controller"
+    );
+    const logWithController: AgentMessage[] = [
+      ...updatedLog,
+      { role: "controller", content: controllerResponse },
+    ];
+
+    const assistantResponses = await Promise.all([
+      fetchAgentResponse([{ role: "user", content: input }], "infoExtractor"),
+      fetchAgentResponse([{ role: "user", content: input }], "fraudAuditor"),
+      fetchAgentResponse([{ role: "user", content: input }], "priceQuoter"),
     ]);
 
-    setChatByRole({
-      controller: controllerReply,
-      infoExtractor: info,
-      fraudAuditor: audit,
-      priceQuoter: quote,
-    });
+    const finalLog: AgentMessage[] = [
+      ...logWithController,
+      { role: "infoExtractor", content: assistantResponses[0] },
+      { role: "fraudAuditor", content: assistantResponses[1] },
+      { role: "priceQuoter", content: assistantResponses[2] },
+    ];
 
-    setInput("");
+    setChatLog(finalLog);
     setLoading(false);
   };
 
@@ -83,7 +87,8 @@ export default function MultiAgentChat() {
             try {
               const json = JSON.parse(jsonStr);
               const delta =
-                json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.message?.content;
+                json.choices?.[0]?.delta?.content ??
+                json.choices?.[0]?.message?.content;
               if (delta) result += delta;
             } catch (err) {
               console.error("JSON parse error:", err);
@@ -99,40 +104,67 @@ export default function MultiAgentChat() {
     }
   };
 
+  const groupedMessages: Record<RoleName, string[]> = {
+    user: [],
+    controller: [],
+    infoExtractor: [],
+    fraudAuditor: [],
+    priceQuoter: [],
+  };
+
+  chatLog.forEach((msg) => {
+    groupedMessages[msg.role] ||= [];
+    groupedMessages[msg.role].push(msg.content);
+  });
+
+  const renderRoleBox = (role: RoleName) => (
+    <div className="border rounded-lg bg-white p-4 shadow mb-4">
+      <h2 className="font-semibold text-blue-700 mb-2">
+        {role === "user"
+          ? "🧑 用户"
+          : `🤖 ${agents[role as keyof typeof agents]?.name || role}`}
+      </h2>
+      {groupedMessages[role]?.map((text, idx) => (
+        <div
+          key={idx}
+          className="text-sm text-gray-800 whitespace-pre-wrap mb-2"
+        >
+          {text}
+        </div>
+      ))}
+    </div>
+  );
+
   return (
-    <div className="max-w-5xl mx-auto p-6">
-      <h1 className="text-3xl font-bold text-center mb-8 text-blue-700">SmartTrade 虚拟团队工作台</h1>
+    <div className="max-w-5xl mx-auto p-4 bg-gradient-to-br from-white to-blue-50 min-h-screen">
+      <h1 className="text-3xl font-bold text-center text-blue-800 mb-6">
+        💼 SmartTrade 虚拟团队工作台
+      </h1>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-        {assistantRoles.map((role) => (
-          <div
-            key={role}
-            className="rounded-lg shadow-lg bg-gradient-to-br from-white to-blue-50 border border-blue-200 p-5 hover:shadow-xl transition-shadow"
-          >
-            <h2 className="font-semibold text-blue-800 text-lg mb-3">
-              🤖 {agents[role]?.name}
-            </h2>
-            <p className="text-sm text-gray-800 whitespace-pre-wrap">
-              {chatByRole[role] || "（暂无消息）"}
-            </p>
-          </div>
-        ))}
-      </div>
+      {renderRoleBox("user")}
+      {renderRoleBox("controller")}
+      {renderRoleBox("infoExtractor")}
+      {renderRoleBox("fraudAuditor")}
+      {renderRoleBox("priceQuoter")}
 
-      <div className="flex gap-2 items-center">
+      {loading && (
+        <div className="text-sm text-gray-500 mb-4">🤖 助手处理中……</div>
+      )}
+
+      <div className="mt-4 flex gap-2">
         <input
-          className="flex-1 border border-gray-300 px-4 py-2 rounded-full shadow-inner focus:outline-none focus:ring-2 focus:ring-blue-400"
-          placeholder="请告诉流程总管你的任务需求..."
+          className="flex-1 border border-blue-300 px-3 py-2 rounded shadow focus:outline-none focus:ring-2 focus:ring-blue-400"
+          placeholder="请输入任务，例如：请帮我回复客户的这封英文邮件……"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSendToController()}
         />
         <button
-          className="bg-blue-600 hover:bg-blue-700 transition text-white font-medium px-5 py-2 rounded-full shadow"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
           disabled={loading}
           onClick={handleSendToController}
         >
-          {loading ? "处理中..." : "发送"}
+          发给流程总管
         </button>
       </div>
     </div>
