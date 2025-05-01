@@ -9,6 +9,7 @@ interface AgentMessage {
   content: string;
 }
 
+
 const assistantRoles: RoleName[] = ["controller", "infoExtractor", "fraudAuditor", "priceQuoter"];
 
 const toMessageArray = (log: AgentMessage[]): Message[] =>
