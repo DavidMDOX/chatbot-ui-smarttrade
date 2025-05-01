@@ -9,6 +9,8 @@ interface AgentMessage {
   content: string;
 }
 
+const assistantRoles: RoleName[] = ["controller", "infoExtractor", "fraudAuditor", "priceQuoter"];
+
 const toMessageArray = (log: AgentMessage[]): Message[] =>
   log.map((msg) => ({
     role: msg.role === "user" ? "user" : "assistant",
@@ -16,49 +18,39 @@ const toMessageArray = (log: AgentMessage[]): Message[] =>
   }));
 
 export default function MultiAgentChat() {
-  const [chatLog, setChatLog] = useState<AgentMessage[]>([]);
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+  const [chatByRole, setChatByRole] = useState<Record<RoleName, string>>({
+    controller: "",
+    infoExtractor: "",
+    fraudAuditor: "",
+    priceQuoter: "",
+  });
 
   const handleSendToController = async () => {
     if (!input.trim()) return;
-
-    const userMessage: AgentMessage = { role: "user", content: input };
-    const updatedLog = [...chatLog, userMessage];
-    setChatLog(updatedLog);
     setLoading(true);
-    setInput("");
+    const userMessage: Message = { role: "user", content: input };
 
-    const controllerResponse = await fetchAgentResponse(
-      toMessageArray(updatedLog),
-      "controller"
-    );
-    const logWithController: AgentMessage[] = [
-      ...updatedLog,
-      { role: "controller", content: controllerResponse },
-    ];
-
-    const assistantResponses = await Promise.all([
-      fetchAgentResponse([{ role: "user", content: input }], "infoExtractor"),
-      fetchAgentResponse([{ role: "user", content: input }], "fraudAuditor"),
-      fetchAgentResponse([{ role: "user", content: input }], "priceQuoter"),
+    const controllerReply = await fetchAgentResponse([userMessage], "controller");
+    const [info, audit, quote] = await Promise.all([
+      fetchAgentResponse([userMessage], "infoExtractor"),
+      fetchAgentResponse([userMessage], "fraudAuditor"),
+      fetchAgentResponse([userMessage], "priceQuoter"),
     ]);
 
-    const finalLog: AgentMessage[] = [
-      ...logWithController,
-      { role: "infoExtractor", content: assistantResponses[0] },
-      { role: "fraudAuditor", content: assistantResponses[1] },
-      { role: "priceQuoter", content: assistantResponses[2] },
-    ];
+    setChatByRole({
+      controller: controllerReply,
+      infoExtractor: info,
+      fraudAuditor: audit,
+      priceQuoter: quote,
+    });
 
-    setChatLog(finalLog);
+    setInput("");
     setLoading(false);
   };
 
-  const fetchAgentResponse = async (
-    messages: Message[],
-    agentType: string
-  ): Promise<string> => {
+  const fetchAgentResponse = async (messages: Message[], agentType: string): Promise<string> => {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -87,8 +79,7 @@ export default function MultiAgentChat() {
             try {
               const json = JSON.parse(jsonStr);
               const delta =
-                json.choices?.[0]?.delta?.content ??
-                json.choices?.[0]?.message?.content;
+                json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.message?.content;
               if (delta) result += delta;
             } catch (err) {
               console.error("JSON parse error:", err);
@@ -104,67 +95,44 @@ export default function MultiAgentChat() {
     }
   };
 
-  const groupedMessages: Record<RoleName, string[]> = {
-    user: [],
-    controller: [],
-    infoExtractor: [],
-    fraudAuditor: [],
-    priceQuoter: [],
-  };
-
-  chatLog.forEach((msg) => {
-    groupedMessages[msg.role] ||= [];
-    groupedMessages[msg.role].push(msg.content);
-  });
-
-  const renderRoleBox = (role: RoleName) => (
-    <div className="border rounded-lg bg-white p-4 shadow mb-4">
-      <h2 className="font-semibold text-blue-700 mb-2">
-        {role === "user"
-          ? "🧑 用户"
-          : `🤖 ${agents[role as keyof typeof agents]?.name || role}`}
-      </h2>
-      {groupedMessages[role]?.map((text, idx) => (
-        <div
-          key={idx}
-          className="text-sm text-gray-800 whitespace-pre-wrap mb-2"
-        >
-          {text}
-        </div>
-      ))}
-    </div>
-  );
-
   return (
-    <div className="max-w-5xl mx-auto p-4 bg-gradient-to-br from-white to-blue-50 min-h-screen">
-      <h1 className="text-3xl font-bold text-center text-blue-800 mb-6">
-        💼 SmartTrade 虚拟团队工作台
-      </h1>
+    <div className="max-w-6xl mx-auto p-6 min-h-screen bg-gradient-to-br from-white to-blue-50">
+      <h1 className="text-3xl font-bold text-center text-blue-800 mb-8">💼 SmartTrade 虚拟团队工作台</h1>
 
-      {renderRoleBox("user")}
-      {renderRoleBox("controller")}
-      {renderRoleBox("infoExtractor")}
-      {renderRoleBox("fraudAuditor")}
-      {renderRoleBox("priceQuoter")}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+        {assistantRoles.map((role) => (
+          <div
+            key={role}
+            className="rounded-xl border border-blue-200 bg-white shadow hover:shadow-md transition-shadow p-5 h-[260px] overflow-y-auto"
+          >
+            <div className="text-sm font-semibold text-blue-700 mb-2">
+              🤖 {agents[role]?.name}
+            </div>
+            <div className="text-sm text-gray-700 whitespace-pre-wrap">
+              {chatByRole[role] || "（暂无消息）"}
+            </div>
+          </div>
+        ))}
+      </div>
 
       {loading && (
-        <div className="text-sm text-gray-500 mb-4">🤖 助手处理中……</div>
+        <div className="text-sm text-gray-500 mb-4 text-center">🤖 助手处理中……</div>
       )}
 
-      <div className="mt-4 flex gap-2">
+      <div className="flex flex-col sm:flex-row gap-3">
         <input
-          className="flex-1 border border-blue-300 px-3 py-2 rounded shadow focus:outline-none focus:ring-2 focus:ring-blue-400"
-          placeholder="请输入任务，例如：请帮我回复客户的这封英文邮件……"
+          className="flex-1 border border-blue-300 px-4 py-2 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
+          placeholder="请告诉流程主管你的任务需求，例如：请帮我回复客户的这封英文邮件……"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSendToController()}
         />
         <button
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded shadow"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg shadow transition-colors"
           disabled={loading}
           onClick={handleSendToController}
         >
-          发给流程总管
+          {loading ? "处理中..." : "发送给流程主管"}
         </button>
       </div>
     </div>
