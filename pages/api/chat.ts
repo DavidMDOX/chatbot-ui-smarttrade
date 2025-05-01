@@ -1,33 +1,10 @@
-import { Message } from "@/types";
+// /pages/api/chat.ts
+import { Message, OpenAIModel } from "@/types";
 import { agents } from "@/utils/agents";
-import { OpenAIModel } from "@/types";
 
 export const config = {
-  runtime: "edge"
+  runtime: "edge",
 };
-
-async function OpenAIStream(messages: Message[], agentType: keyof typeof agents) {
-  const systemPrompt = agents[agentType]?.prompt || "You are a helpful assistant.";
-
-  const res = await fetch("https://api.openai.com/v1/chat/completions", {
-    headers: {
-      "Content-Type": "application/json",
-      Authorization: `Bearer ${process.env.OPENAI_API_KEY || ""}`
-    },
-    method: "POST",
-    body: JSON.stringify({
-      model: OpenAIModel.GPT_4_TURBO,  // ✅ 使用统一定义
-      messages: [
-        { role: "system", content: systemPrompt },
-        ...messages
-      ],
-      temperature: 0.5,
-      stream: true
-    })
-  });
-
-  return res.body;
-}
 
 const handler = async (req: Request): Promise<Response> => {
   try {
@@ -36,26 +13,42 @@ const handler = async (req: Request): Promise<Response> => {
       agentType?: string;
     };
 
-    const charLimit = 12000;
-    let charCount = 0;
-    const messagesToSend: Message[] = [];
+    const prompt = agents[(agentType || "controller") as keyof typeof agents]?.prompt
+      || "You are a helpful assistant.";
 
-    for (const message of messages) {
-      if (charCount + message.content.length > charLimit) break;
-      charCount += message.content.length;
-      messagesToSend.push(message);
+    const body = JSON.stringify({
+      model: OpenAIModel.GPT_4_TURBO,
+      messages: [{ role: "system", content: prompt }, ...messages],
+      temperature: 0.5,
+      stream: false, // ❌ 暂时关闭流式
+    });
+
+    const res = await fetch("https://api.openai.com/v1/chat/completions", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${process.env.OPENAI_API_KEY || ""}`,
+      },
+      body,
+    });
+
+    if (!res.ok) {
+      const errorText = await res.text();
+      console.error("OpenAI Error:", errorText);
+      return new Response("OpenAI API Error", { status: 500 });
     }
 
-    const stream = await OpenAIStream(messagesToSend, (agentType || "controller") as keyof typeof agents);
+    const data = await res.json();
+    const content = data.choices?.[0]?.message?.content || "（助手没有返回任何内容）";
 
-    return new Response(stream, {
+    return new Response(content, {
       headers: {
-        "Content-Type": "text/event-stream"
-      }
+        "Content-Type": "text/plain",
+      },
     });
-  } catch (error) {
-    console.error("API handler error:", error);
-    return new Response("Error", { status: 500 });
+  } catch (err) {
+    console.error("Server Error:", err);
+    return new Response("Server Error", { status: 500 });
   }
 };
 
