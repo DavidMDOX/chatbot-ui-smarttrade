@@ -10,9 +10,7 @@ interface AgentMessage {
   content: string;
 }
 
-const allRoles: RoleName[] = [
-  "user",
-  "controller",
+const subAgents: AgentRole[] = [
   "infoExtractor",
   "fraudAuditor",
   "priceQuoter",
@@ -44,32 +42,23 @@ export default function MultiAgentChat() {
       toMessageArray(updatedLog),
       "controller"
     );
-
-    const newLog: AgentMessage[] = [
+    const logWithController: AgentMessage[] = [
       ...updatedLog,
       { role: "controller", content: controllerResponse },
     ];
 
-    const assistantRoles: AgentRole[] = [
-      "infoExtractor",
-      "fraudAuditor",
-      "priceQuoter",
-      "logisticsCoordinator",
-      "afterSalesSupport",
-    ];
-
     const assistantResponses = await Promise.all(
-      assistantRoles.map((role) =>
+      subAgents.map((role) =>
         fetchAgentResponse([{ role: "user", content: input }], role)
       )
     );
 
-    const assistantMessages: AgentMessage[] = assistantRoles.map((role, idx) => ({
+    const assistantMessages: AgentMessage[] = subAgents.map((role, idx) => ({
       role,
       content: assistantResponses[idx],
     }));
 
-    setChatLog([...newLog, ...assistantMessages]);
+    setChatLog([...logWithController, ...assistantMessages]);
     setLoading(false);
   };
 
@@ -133,14 +122,13 @@ export default function MultiAgentChat() {
   };
 
   chatLog.forEach((msg) => {
-    groupedMessages[msg.role] ||= [];
     groupedMessages[msg.role].push(msg.content);
   });
 
   const renderRoleBox = (role: RoleName) => (
     <div
       key={role}
-      className="rounded-lg border border-blue-200 bg-white shadow hover:shadow-md p-4 mb-4"
+      className="rounded-lg border border-blue-200 bg-white shadow p-4 mb-4"
     >
       <h2 className="font-semibold text-blue-700 mb-2">
         {role === "user"
@@ -148,10 +136,7 @@ export default function MultiAgentChat() {
           : `🤖 ${agents[role as AgentRole]?.name || role}`}
       </h2>
       {groupedMessages[role]?.map((text, idx) => (
-        <div
-          key={idx}
-          className="text-sm text-gray-800 whitespace-pre-wrap mb-2"
-        >
+        <div key={idx} className="text-sm text-gray-800 whitespace-pre-wrap mb-2">
           {text}
         </div>
       ))}
@@ -164,12 +149,19 @@ export default function MultiAgentChat() {
         💼 SmartTrade 虚拟团队工作台
       </h1>
 
-      {allRoles.map((role) => renderRoleBox(role))}
+      {/* 用户输入 */}
+      {renderRoleBox("user")}
+
+      {/* 一级主模块：流程总管 */}
+      <div className="mb-6">{renderRoleBox("controller")}</div>
+
+      {/* 二级模块：流程总管下属助手 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+        {subAgents.map((role) => renderRoleBox(role))}
+      </div>
 
       {loading && (
-        <div className="text-sm text-gray-500 mb-4 text-center">
-          🤖 助手处理中……
-        </div>
+        <div className="text-sm text-gray-500 mb-4 text-center">🤖 助手处理中……</div>
       )}
 
       <div className="mt-4 flex flex-col sm:flex-row gap-3">
