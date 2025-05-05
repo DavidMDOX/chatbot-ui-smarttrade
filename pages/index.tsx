@@ -5,25 +5,13 @@ import { Message } from "@/types";
 type AgentRole = keyof typeof agents;
 type RoleName = AgentRole | "user";
 
-interface AgentMessage {
-  role: RoleName;
-  content: string;
-}
-
-const assistantRoles: AgentRole[] = [
-  "controller",
+const subAgents: AgentRole[] = [
   "infoExtractor",
   "fraudAuditor",
   "priceQuoter",
   "logisticsCoordinator",
   "afterSalesSupport",
 ];
-
-const toMessageArray = (log: AgentMessage[]): Message[] =>
-  log.map((msg) => ({
-    role: msg.role === "user" ? "user" : "assistant",
-    content: msg.content,
-  }));
 
 export default function MultiAgentChat() {
   const [input, setInput] = useState("");
@@ -46,23 +34,22 @@ export default function MultiAgentChat() {
 
     const controllerReply = await fetchAgentResponse([userMessage], "controller");
 
-    const [info, audit, quote, logistics, support] = await Promise.all([
-      fetchAgentResponse([userMessage], "infoExtractor"),
-      fetchAgentResponse([userMessage], "fraudAuditor"),
-      fetchAgentResponse([userMessage], "priceQuoter"),
-      fetchAgentResponse([userMessage], "logisticsCoordinator"),
-      fetchAgentResponse([userMessage], "afterSalesSupport"),
-    ]);
+    const subReplies = await Promise.all(
+      subAgents.map((role) =>
+        fetchAgentResponse([userMessage], role)
+      )
+    );
 
-    setChatByRole({
+    const newChatByRole: Record<AgentRole, string> = {
       controller: controllerReply,
-      infoExtractor: info,
-      fraudAuditor: audit,
-      priceQuoter: quote,
-      logisticsCoordinator: logistics,
-      afterSalesSupport: support,
-    });
+      infoExtractor: subReplies[0],
+      fraudAuditor: subReplies[1],
+      priceQuoter: subReplies[2],
+      logisticsCoordinator: subReplies[3],
+      afterSalesSupport: subReplies[4],
+    };
 
+    setChatByRole(newChatByRole);
     setInput("");
     setLoading(false);
   };
@@ -87,13 +74,17 @@ export default function MultiAgentChat() {
         done = doneReading;
         if (value) {
           const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk.split("\n").filter((line) => line.trim().startsWith("data:"));
+          const lines = chunk
+            .split("\n")
+            .filter((line) => line.trim().startsWith("data:"));
           for (const line of lines) {
             const jsonStr = line.replace("data: ", "").trim();
             if (jsonStr === "[DONE]") continue;
             try {
               const json = JSON.parse(jsonStr);
-              const delta = json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.message?.content;
+              const delta =
+                json.choices?.[0]?.delta?.content ??
+                json.choices?.[0]?.message?.content;
               if (delta) result += delta;
             } catch (err) {
               console.error("JSON parse error:", err);
@@ -109,26 +100,32 @@ export default function MultiAgentChat() {
     }
   };
 
+  const renderAgentBox = (role: AgentRole) => (
+    <div
+      key={role}
+      className="rounded-xl border border-blue-200 bg-white shadow hover:shadow-md transition-shadow p-5 h-[240px] overflow-y-auto"
+    >
+      <div className="text-sm font-semibold text-blue-700 mb-2">
+        🤖 {agents[role]?.name}
+      </div>
+      <div className="text-sm text-gray-700 whitespace-pre-wrap">
+        {chatByRole[role] || "（暂无消息）"}
+      </div>
+    </div>
+  );
+
   return (
     <div className="max-w-6xl mx-auto p-6 min-h-screen bg-gradient-to-br from-white to-blue-50">
       <h1 className="text-3xl font-bold text-center text-blue-800 mb-8">
         💼 SmartTrade 虚拟团队工作台
       </h1>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
-        {assistantRoles.map((role) => (
-          <div
-            key={role}
-            className="rounded-xl border border-blue-200 bg-white shadow hover:shadow-md transition-shadow p-5 h-[260px] overflow-y-auto"
-          >
-            <div className="text-sm font-semibold text-blue-700 mb-2">
-              🤖 {agents[role]?.name}
-            </div>
-            <div className="text-sm text-gray-700 whitespace-pre-wrap">
-              {chatByRole[role] || "（暂无消息）"}
-            </div>
-          </div>
-        ))}
+      {/* 一级流程总管 */}
+      {renderAgentBox("controller")}
+
+      {/* 下属模块以网格展示 */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6 mb-8">
+        {subAgents.map((role) => renderAgentBox(role))}
       </div>
 
       {loading && (
@@ -138,7 +135,7 @@ export default function MultiAgentChat() {
       <div className="flex flex-col sm:flex-row gap-3">
         <input
           className="flex-1 border border-blue-300 px-4 py-2 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-          placeholder="请告诉流程总管你的任务需求，例如：请帮我回复客户的这封英文邮件……"
+          placeholder="请输入任务，例如：请帮我回复客户的这封英文邮件……"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSendToController()}
