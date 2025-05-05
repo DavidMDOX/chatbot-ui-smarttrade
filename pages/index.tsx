@@ -116,9 +116,12 @@ export default function MultiAgentChat() {
 
   return (
     <div className="max-w-6xl mx-auto p-6 min-h-screen bg-gradient-to-br from-white to-blue-50">
-      <h1 className="text-3xl font-bold text-center text-blue-800 mb-8">
-        💼 SmartTrade AI(Beta)/智贸团队工作台内测版 created by Tastybite Foods
-      </h1>
+<h1 className="text-3xl font-bold text-center text-blue-800 mb-1">
+  💼 SmartTrade AI (Beta) / 智贸AI团队内测版
+</h1>
+<p className="text-sm text-center text-gray-500 mb-6">
+  created by Tastybite Foods
+</p>
 
       {/* 一级流程总管 */}
       {renderAgentBox("controller")}
