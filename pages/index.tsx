@@ -15,6 +15,8 @@ const assistantRoles: AgentRole[] = [
   "infoExtractor",
   "fraudAuditor",
   "priceQuoter",
+  "logisticsCoordinator",
+  "afterSalesSupport",
 ];
 
 const toMessageArray = (log: AgentMessage[]): Message[] =>
@@ -26,25 +28,30 @@ const toMessageArray = (log: AgentMessage[]): Message[] =>
 export default function MultiAgentChat() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+
   const [chatByRole, setChatByRole] = useState<Record<AgentRole, string>>({
     controller: "",
     infoExtractor: "",
     fraudAuditor: "",
     priceQuoter: "",
+    logisticsCoordinator: "",
+    afterSalesSupport: "",
   });
 
   const handleSendToController = async () => {
     if (!input.trim()) return;
-
     setLoading(true);
+
     const userMessage: Message = { role: "user", content: input };
 
     const controllerReply = await fetchAgentResponse([userMessage], "controller");
 
-    const [info, audit, quote] = await Promise.all([
+    const [info, audit, quote, logistics, support] = await Promise.all([
       fetchAgentResponse([userMessage], "infoExtractor"),
       fetchAgentResponse([userMessage], "fraudAuditor"),
       fetchAgentResponse([userMessage], "priceQuoter"),
+      fetchAgentResponse([userMessage], "logisticsCoordinator"),
+      fetchAgentResponse([userMessage], "afterSalesSupport"),
     ]);
 
     setChatByRole({
@@ -52,16 +59,15 @@ export default function MultiAgentChat() {
       infoExtractor: info,
       fraudAuditor: audit,
       priceQuoter: quote,
+      logisticsCoordinator: logistics,
+      afterSalesSupport: support,
     });
 
     setInput("");
     setLoading(false);
   };
 
-  const fetchAgentResponse = async (
-    messages: Message[],
-    agentType: AgentRole
-  ): Promise<string> => {
+  const fetchAgentResponse = async (messages: Message[], agentType: AgentRole): Promise<string> => {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -81,17 +87,13 @@ export default function MultiAgentChat() {
         done = doneReading;
         if (value) {
           const chunk = decoder.decode(value, { stream: true });
-          const lines = chunk
-            .split("\n")
-            .filter((line) => line.trim().startsWith("data:"));
+          const lines = chunk.split("\n").filter((line) => line.trim().startsWith("data:"));
           for (const line of lines) {
             const jsonStr = line.replace("data: ", "").trim();
             if (jsonStr === "[DONE]") continue;
             try {
               const json = JSON.parse(jsonStr);
-              const delta =
-                json.choices?.[0]?.delta?.content ??
-                json.choices?.[0]?.message?.content;
+              const delta = json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.message?.content;
               if (delta) result += delta;
             } catch (err) {
               console.error("JSON parse error:", err);
