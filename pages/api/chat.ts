@@ -31,11 +31,13 @@ const handler = async (req: Request): Promise<Response> => {
       body,
     });
 
-    return new Response(res.body, {
-      headers: {
-        "Content-Type": "text/event-stream",
-      },
-    });
+return new Response(res.body, {
+  headers: {
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  },
+});
   } catch (err) {
     console.error("Server Error:", err);
     return new Response("Server Error", { status: 500 });
