@@ -1,4 +1,3 @@
-// /pages/api/chat.ts
 import { Message, OpenAIModel } from "@/types";
 import { agents } from "@/utils/agents";
 
@@ -20,7 +19,7 @@ const handler = async (req: Request): Promise<Response> => {
       model: OpenAIModel.GPT_4_TURBO,
       messages: [{ role: "system", content: prompt }, ...messages],
       temperature: 0.5,
-      stream: false, // ❌ 暂时关闭流式
+      stream: true,
     });
 
     const res = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -32,18 +31,9 @@ const handler = async (req: Request): Promise<Response> => {
       body,
     });
 
-    if (!res.ok) {
-      const errorText = await res.text();
-      console.error("OpenAI Error:", errorText);
-      return new Response("OpenAI API Error", { status: 500 });
-    }
-
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content || "（助手没有返回任何内容）";
-
-    return new Response(content, {
+    return new Response(res.body, {
       headers: {
-        "Content-Type": "text/plain",
+        "Content-Type": "text/event-stream",
       },
     });
   } catch (err) {
