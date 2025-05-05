@@ -2,12 +2,23 @@ import { useState } from "react";
 import { agents } from "@/utils/agents";
 import { Message } from "@/types";
 
-type RoleName = keyof typeof agents | "user";
+type AgentRole = keyof typeof agents;
+type RoleName = AgentRole | "user";
 
 interface AgentMessage {
   role: RoleName;
   content: string;
 }
+
+const allRoles: RoleName[] = [
+  "user",
+  "controller",
+  "infoExtractor",
+  "fraudAuditor",
+  "priceQuoter",
+  "logisticsCoordinator",
+  "afterSalesSupport",
+];
 
 const toMessageArray = (log: AgentMessage[]): Message[] =>
   log.map((msg) => ({
@@ -33,70 +44,82 @@ export default function MultiAgentChat() {
       toMessageArray(updatedLog),
       "controller"
     );
-    const logWithController: AgentMessage[] = [
+
+    const newLog: AgentMessage[] = [
       ...updatedLog,
       { role: "controller", content: controllerResponse },
     ];
 
-    const assistantResponses = await Promise.all([
-      fetchAgentResponse([{ role: "user", content: input }], "infoExtractor"),
-      fetchAgentResponse([{ role: "user", content: input }], "fraudAuditor"),
-      fetchAgentResponse([{ role: "user", content: input }], "priceQuoter"),
-    ]);
-
-    const finalLog: AgentMessage[] = [
-      ...logWithController,
-      { role: "infoExtractor", content: assistantResponses[0] },
-      { role: "fraudAuditor", content: assistantResponses[1] },
-      { role: "priceQuoter", content: assistantResponses[2] },
+    const assistantRoles: AgentRole[] = [
+      "infoExtractor",
+      "fraudAuditor",
+      "priceQuoter",
+      "logisticsCoordinator",
+      "afterSalesSupport",
     ];
 
-    setChatLog(finalLog);
+    const assistantResponses = await Promise.all(
+      assistantRoles.map((role) =>
+        fetchAgentResponse([{ role: "user", content: input }], role)
+      )
+    );
+
+    const assistantMessages: AgentMessage[] = assistantRoles.map((role, idx) => ({
+      role,
+      content: assistantResponses[idx],
+    }));
+
+    setChatLog([...newLog, ...assistantMessages]);
     setLoading(false);
   };
 
   const fetchAgentResponse = async (
     messages: Message[],
-    agentType: string
+    agentType: AgentRole
   ): Promise<string> => {
-    const res = await fetch("/api/chat", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ messages, agentType }),
-    });
+    try {
+      const res = await fetch("/api/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages, agentType }),
+      });
 
-    if (!res.ok || !res.body) return "（助手未能回应，请稍后再试）";
+      if (!res.ok || !res.body) return "（助手未能回应，请稍后再试）";
 
-    const reader = res.body.getReader();
-    const decoder = new TextDecoder("utf-8");
-    let result = "";
-    let done = false;
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder("utf-8");
+      let result = "";
+      let done = false;
 
-    while (!done) {
-      const { value, done: doneReading } = await reader.read();
-      done = doneReading;
-      if (value) {
-        const chunk = decoder.decode(value, { stream: true });
-        const lines = chunk
-          .split("\n")
-          .filter((line) => line.trim().startsWith("data:"));
-        for (const line of lines) {
-          const jsonStr = line.replace("data: ", "").trim();
-          if (jsonStr === "[DONE]") continue;
-          try {
-            const json = JSON.parse(jsonStr);
-            const delta =
-              json.choices?.[0]?.delta?.content ??
-              json.choices?.[0]?.message?.content;
-            if (delta) result += delta;
-          } catch (err) {
-            console.error("JSON parse error:", err);
+      while (!done) {
+        const { value, done: doneReading } = await reader.read();
+        done = doneReading;
+        if (value) {
+          const chunk = decoder.decode(value, { stream: true });
+          const lines = chunk
+            .split("\n")
+            .filter((line) => line.trim().startsWith("data:"));
+          for (const line of lines) {
+            const jsonStr = line.replace("data: ", "").trim();
+            if (jsonStr === "[DONE]") continue;
+            try {
+              const json = JSON.parse(jsonStr);
+              const delta =
+                json.choices?.[0]?.delta?.content ??
+                json.choices?.[0]?.message?.content;
+              if (delta) result += delta;
+            } catch (err) {
+              console.error("JSON parse error:", err);
+            }
           }
         }
       }
-    }
 
-    return result || "（助手没有返回任何内容）";
+      return result || "（助手没有返回任何内容）";
+    } catch (err) {
+      console.error("fetchAgentResponse error:", err);
+      return "（请求出错，请稍后重试）";
+    }
   };
 
   const groupedMessages: Record<RoleName, string[]> = {
@@ -105,6 +128,8 @@ export default function MultiAgentChat() {
     infoExtractor: [],
     fraudAuditor: [],
     priceQuoter: [],
+    logisticsCoordinator: [],
+    afterSalesSupport: [],
   };
 
   chatLog.forEach((msg) => {
@@ -113,14 +138,20 @@ export default function MultiAgentChat() {
   });
 
   const renderRoleBox = (role: RoleName) => (
-    <div className="border rounded-lg bg-white p-4 shadow mb-4">
+    <div
+      key={role}
+      className="rounded-lg border border-blue-200 bg-white shadow hover:shadow-md p-4 mb-4"
+    >
       <h2 className="font-semibold text-blue-700 mb-2">
         {role === "user"
           ? "🧑 用户"
-          : `🤖 ${agents[role as keyof typeof agents]?.name || role}`}
+          : `🤖 ${agents[role as AgentRole]?.name || role}`}
       </h2>
       {groupedMessages[role]?.map((text, idx) => (
-        <div key={idx} className="text-sm text-gray-800 whitespace-pre-wrap mb-2">
+        <div
+          key={idx}
+          className="text-sm text-gray-800 whitespace-pre-wrap mb-2"
+        >
           {text}
         </div>
       ))}
@@ -128,31 +159,33 @@ export default function MultiAgentChat() {
   );
 
   return (
-    <div className="max-w-4xl mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-4">SmartTrade 虚拟团队工作台</h1>
+    <div className="max-w-6xl mx-auto p-6 min-h-screen bg-gradient-to-br from-white to-blue-50">
+      <h1 className="text-3xl font-bold text-center text-blue-800 mb-6">
+        💼 SmartTrade 虚拟团队工作台
+      </h1>
 
-      {renderRoleBox("user")}
-      {renderRoleBox("controller")}
-      {renderRoleBox("infoExtractor")}
-      {renderRoleBox("fraudAuditor")}
-      {renderRoleBox("priceQuoter")}
+      {allRoles.map((role) => renderRoleBox(role))}
 
-      {loading && <div className="text-sm text-gray-500 mb-4">🤖 助手处理中……</div>}
+      {loading && (
+        <div className="text-sm text-gray-500 mb-4 text-center">
+          🤖 助手处理中……
+        </div>
+      )}
 
-      <div className="mt-4 flex gap-2">
+      <div className="mt-4 flex flex-col sm:flex-row gap-3">
         <input
-          className="flex-1 border px-3 py-2 rounded shadow"
+          className="flex-1 border border-blue-300 px-4 py-2 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
           placeholder="请输入任务，例如：请帮我回复客户的这封英文邮件……"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSendToController()}
         />
         <button
-          className="bg-blue-600 text-white px-4 py-2 rounded shadow"
+          className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg shadow transition-colors"
           disabled={loading}
           onClick={handleSendToController}
         >
-          发给流程总管
+          {loading ? "处理中..." : "发给流程总管"}
         </button>
       </div>
     </div>
