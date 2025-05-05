@@ -9,8 +9,14 @@ interface AgentMessage {
   content: string;
 }
 
-
-const assistantRoles: RoleName[] = ["controller", "infoExtractor", "fraudAuditor", "priceQuoter"];
+const assistantRoles: RoleName[] = [
+  "controller",
+  "infoExtractor",
+  "fraudAuditor",
+  "priceQuoter",
+  "logisticsCoordinator",
+  "afterSalesSupport"
+];
 
 const toMessageArray = (log: AgentMessage[]): Message[] =>
   log.map((msg) => ({
@@ -26,6 +32,9 @@ export default function MultiAgentChat() {
     infoExtractor: "",
     fraudAuditor: "",
     priceQuoter: "",
+    logisticsCoordinator: "",
+    afterSalesSupport: "",
+    user: ""
   });
 
   const handleSendToController = async () => {
@@ -34,10 +43,12 @@ export default function MultiAgentChat() {
     const userMessage: Message = { role: "user", content: input };
 
     const controllerReply = await fetchAgentResponse([userMessage], "controller");
-    const [info, audit, quote] = await Promise.all([
+    const [info, audit, quote, logistics, support] = await Promise.all([
       fetchAgentResponse([userMessage], "infoExtractor"),
       fetchAgentResponse([userMessage], "fraudAuditor"),
       fetchAgentResponse([userMessage], "priceQuoter"),
+      fetchAgentResponse([userMessage], "logisticsCoordinator"),
+      fetchAgentResponse([userMessage], "afterSalesSupport")
     ]);
 
     setChatByRole({
@@ -45,13 +56,19 @@ export default function MultiAgentChat() {
       infoExtractor: info,
       fraudAuditor: audit,
       priceQuoter: quote,
+      logisticsCoordinator: logistics,
+      afterSalesSupport: support,
+      user: input
     });
 
     setInput("");
     setLoading(false);
   };
 
-  const fetchAgentResponse = async (messages: Message[], agentType: string): Promise<string> => {
+  const fetchAgentResponse = async (
+    messages: Message[],
+    agentType: string
+  ): Promise<string> => {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -80,7 +97,8 @@ export default function MultiAgentChat() {
             try {
               const json = JSON.parse(jsonStr);
               const delta =
-                json.choices?.[0]?.delta?.content ?? json.choices?.[0]?.message?.content;
+                json.choices?.[0]?.delta?.content ??
+                json.choices?.[0]?.message?.content;
               if (delta) result += delta;
             } catch (err) {
               console.error("JSON parse error:", err);
@@ -98,11 +116,11 @@ export default function MultiAgentChat() {
 
   return (
     <div className="max-w-6xl mx-auto p-6 min-h-screen bg-gradient-to-br from-white to-blue-50">
-      <h1 className="text-3xl font-bold text-center text-red-600">调试中：是否生效？</h1>
-    
-      <h1 className="text-3xl font-bold text-center text-blue-800 mb-8">💼 SmartTrade 虚拟团队工作台</h1>
+      <h1 className="text-3xl font-bold text-center text-blue-800 mb-8">
+        💼 SmartTrade 虚拟团队工作台
+      </h1>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-8">
         {assistantRoles.map((role) => (
           <div
             key={role}
@@ -125,7 +143,7 @@ export default function MultiAgentChat() {
       <div className="flex flex-col sm:flex-row gap-3">
         <input
           className="flex-1 border border-blue-300 px-4 py-2 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-          placeholder="请告诉流程主管你的任务需求，例如：请帮我回复客户的这封英文邮件……"
+          placeholder="请输入任务，例如：请帮我回复客户的这封英文邮件……"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSendToController()}
@@ -135,7 +153,7 @@ export default function MultiAgentChat() {
           disabled={loading}
           onClick={handleSendToController}
         >
-          {loading ? "处理中..." : "发送给流程主管"}
+          {loading ? "处理中..." : "发送给流程总管"}
         </button>
       </div>
     </div>
