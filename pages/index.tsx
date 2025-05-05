@@ -26,35 +26,37 @@ export default function MultiAgentChat() {
     afterSalesSupport: "",
   });
 
+  const updateChat = (role: AgentRole, value: string) => {
+    setChatByRole((prev) => ({ ...prev, [role]: value }));
+  };
+
   const handleSendToController = async () => {
     if (!input.trim()) return;
     setLoading(true);
 
     const userMessage: Message = { role: "user", content: input };
 
-    const controllerReply = await fetchAgentResponse([userMessage], "controller");
+    await fetchAgentResponse([userMessage], "controller", (text) =>
+      updateChat("controller", text)
+    );
 
-    const subReplies = await Promise.all(
+    await Promise.all(
       subAgents.map((role) =>
-        fetchAgentResponse([userMessage], role)
+        fetchAgentResponse([userMessage], role, (text) =>
+          updateChat(role, text)
+        )
       )
     );
 
-    const newChatByRole: Record<AgentRole, string> = {
-      controller: controllerReply,
-      infoExtractor: subReplies[0],
-      fraudAuditor: subReplies[1],
-      priceQuoter: subReplies[2],
-      logisticsCoordinator: subReplies[3],
-      afterSalesSupport: subReplies[4],
-    };
-
-    setChatByRole(newChatByRole);
     setInput("");
     setLoading(false);
   };
 
-  const fetchAgentResponse = async (messages: Message[], agentType: AgentRole): Promise<string> => {
+  const fetchAgentResponse = async (
+    messages: Message[],
+    agentType: AgentRole,
+    onDelta: (text: string) => void
+  ): Promise<void> => {
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -62,7 +64,10 @@ export default function MultiAgentChat() {
         body: JSON.stringify({ messages, agentType }),
       });
 
-      if (!res.ok || !res.body) return "（助手未能回应，请稍后再试）";
+      if (!res.ok || !res.body) {
+        onDelta("（助手未能回应，请稍后再试）");
+        return;
+      }
 
       const reader = res.body.getReader();
       const decoder = new TextDecoder("utf-8");
@@ -85,7 +90,10 @@ export default function MultiAgentChat() {
               const delta =
                 json.choices?.[0]?.delta?.content ??
                 json.choices?.[0]?.message?.content;
-              if (delta) result += delta;
+              if (delta) {
+                result += delta;
+                onDelta(result);
+              }
             } catch (err) {
               console.error("JSON parse error:", err);
             }
@@ -93,10 +101,10 @@ export default function MultiAgentChat() {
         }
       }
 
-      return result || "（助手没有返回任何内容）";
+      if (!result) onDelta("（助手没有返回任何内容）");
     } catch (err) {
       console.error("fetchAgentResponse error:", err);
-      return "（请求出错，请稍后重试）";
+      onDelta("（请求出错，请稍后重试）");
     }
   };
 
@@ -116,23 +124,23 @@ export default function MultiAgentChat() {
 
   return (
     <div className="max-w-6xl mx-auto p-6 min-h-screen bg-gradient-to-br from-white to-blue-50">
-<h1 className="text-3xl font-bold text-center text-blue-800 mb-1">
-  💼 SmartTrade AI (Beta) / 智贸AI团队内测版
-</h1>
-<p className="text-sm text-center text-gray-500 mb-6">
-  created by Tastybite Foods
-</p>
+      <h1 className="text-3xl font-bold text-center text-blue-800 mb-1">
+        💼 SmartTrade AI (Beta) / 智贸AI团队内测版
+      </h1>
+      <p className="text-sm text-center text-gray-500 mb-6">
+        created by Tastybite Foods
+      </p>
 
-      {/* 一级流程总管 */}
       {renderAgentBox("controller")}
 
-      {/* 下属模块以网格展示 */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mt-6 mb-8">
         {subAgents.map((role) => renderAgentBox(role))}
       </div>
 
       {loading && (
-        <div className="text-sm text-gray-500 mb-4 text-center">🤖 助手处理中……</div>
+        <div className="text-sm text-gray-500 mb-4 text-center">
+          🤖 助手处理中……
+        </div>
       )}
 
       <div className="flex flex-col sm:flex-row gap-3">
