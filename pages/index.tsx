@@ -2,20 +2,19 @@ import { useState } from "react";
 import { agents } from "@/utils/agents";
 import { Message } from "@/types";
 
-type RoleName = keyof typeof agents | "user";
+type AgentRole = keyof typeof agents;
+type RoleName = AgentRole | "user";
 
 interface AgentMessage {
   role: RoleName;
   content: string;
 }
 
-const assistantRoles: RoleName[] = [
+const assistantRoles: AgentRole[] = [
   "controller",
   "infoExtractor",
   "fraudAuditor",
   "priceQuoter",
-  "logisticsCoordinator",
-  "afterSalesSupport"
 ];
 
 const toMessageArray = (log: AgentMessage[]): Message[] =>
@@ -27,28 +26,25 @@ const toMessageArray = (log: AgentMessage[]): Message[] =>
 export default function MultiAgentChat() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
-  const [chatByRole, setChatByRole] = useState<Record<RoleName, string>>({
+  const [chatByRole, setChatByRole] = useState<Record<AgentRole, string>>({
     controller: "",
     infoExtractor: "",
     fraudAuditor: "",
     priceQuoter: "",
-    logisticsCoordinator: "",
-    afterSalesSupport: "",
-    user: ""
   });
 
   const handleSendToController = async () => {
     if (!input.trim()) return;
+
     setLoading(true);
     const userMessage: Message = { role: "user", content: input };
 
     const controllerReply = await fetchAgentResponse([userMessage], "controller");
-    const [info, audit, quote, logistics, support] = await Promise.all([
+
+    const [info, audit, quote] = await Promise.all([
       fetchAgentResponse([userMessage], "infoExtractor"),
       fetchAgentResponse([userMessage], "fraudAuditor"),
       fetchAgentResponse([userMessage], "priceQuoter"),
-      fetchAgentResponse([userMessage], "logisticsCoordinator"),
-      fetchAgentResponse([userMessage], "afterSalesSupport")
     ]);
 
     setChatByRole({
@@ -56,9 +52,6 @@ export default function MultiAgentChat() {
       infoExtractor: info,
       fraudAuditor: audit,
       priceQuoter: quote,
-      logisticsCoordinator: logistics,
-      afterSalesSupport: support,
-      user: input
     });
 
     setInput("");
@@ -67,7 +60,7 @@ export default function MultiAgentChat() {
 
   const fetchAgentResponse = async (
     messages: Message[],
-    agentType: string
+    agentType: AgentRole
   ): Promise<string> => {
     try {
       const res = await fetch("/api/chat", {
@@ -120,7 +113,7 @@ export default function MultiAgentChat() {
         💼 SmartTrade 虚拟团队工作台
       </h1>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
         {assistantRoles.map((role) => (
           <div
             key={role}
@@ -143,7 +136,7 @@ export default function MultiAgentChat() {
       <div className="flex flex-col sm:flex-row gap-3">
         <input
           className="flex-1 border border-blue-300 px-4 py-2 rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-400"
-          placeholder="请输入任务，例如：请帮我回复客户的这封英文邮件……"
+          placeholder="请告诉流程总管你的任务需求，例如：请帮我回复客户的这封英文邮件……"
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && handleSendToController()}
